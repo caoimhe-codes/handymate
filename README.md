@@ -77,3 +77,30 @@ The most significant hurdle was mapping the browser's local MediaStream into Goo
 - Native iOS and Android application wrapper.
 - Integration with local hardware store inventory APIs (e.g. Home Depot) to automatically build shopping carts when users lack the tools required for a diagnosis.
 - AR overlays projecting arrows directly onto the user's video feed.
+
+---
+
+## 💻 Local Spin-up Instructions
+To run this project locally for judging or development:
+
+1. **Clone the repository:**
+   `git clone https://github.com/caoimhe-codes/handymate.git`
+   `cd handymate`
+
+2. **Start the Express WebSocket Backend:**
+   Create a `.env` file in the `/backend` directory containing `GEMINI_API_KEY=your_key_here`.
+   `cd backend`
+   `npm install`
+   `node server.js`
+   *(Runs on port 8080)*
+
+3. **Start the Next.js Frontend:**
+   Create a `.env.local` file in `/frontend` containing your Firebase config keys.
+   `cd frontend`
+   `npm install`
+   `npm run dev`
+   *(Runs on port 3000)*
+
+## ☁️ Proof of Deployment (Google Cloud)
+HandyMate fulfills the competition requirement of utilizing Google Cloud Architecture. 
+The entire production Next.js frontend routes its WebSocket `<canvas>` frame extraction and WebAudio PCM buffers directly through the Node.js payload wrapper, which is containerized via Docker and actively deployed via **Google Cloud Run** (`https://handymate...run.app`). The database state is managed securely via **Google Firebase/Firestore**.
