@@ -77,6 +77,7 @@ The most significant hurdle was mapping the browser's local MediaStream into Goo
 - Native iOS and Android application wrapper.
 - Integration with local hardware store inventory APIs (e.g. Home Depot) to automatically build shopping carts when users lack the tools required for a diagnosis.
 - AR overlays projecting arrows directly onto the user's video feed.
+- **Cross-device Google Authentication** utilizing Firebase Auth to allow users to securely log in and sync their DIY inventory and past project history across laptops, tablets, and mobile devices.
 
 ---
 

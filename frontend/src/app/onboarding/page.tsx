@@ -205,7 +205,7 @@ export default function OnboardingPage() {
   };
 
   return (
-    <div className="min-h-screen bg-teal-950 text-teal-50 flex flex-col items-center justify-center p-6 relative overflow-hidden font-sans">
+    <div className="min-h-screen bg-teal-950 text-teal-50 flex flex-col items-center justify-center p-6 pb-20 relative overflow-x-hidden overflow-y-auto font-sans">
       {/* Decorative background glow */}
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] rounded-full blur-[120px] pointer-events-none transition-colors duration-1000 bg-teal-500/10" />
 
