@@ -22,6 +22,7 @@ export function useLiveAPI(experience: string = "Unknown", inventory: string[] =
     // Queue to hold incoming Gemini phonetic audio buffers so they play sequentially
     const audioQueueRef = useRef<AudioBuffer[]>([]);
     const isPlayingRef = useRef<boolean>(false);
+    const currentAudioSourceRef = useRef<AudioBufferSourceNode | null>(null);
 
     const playNextInQueue = () => {
         const audioCtx = audioContextRef.current;
@@ -36,7 +37,11 @@ export function useLiveAPI(experience: string = "Unknown", inventory: string[] =
         const source = audioCtx.createBufferSource();
         source.buffer = nextBuffer;
         source.connect(audioCtx.destination);
-        source.onended = () => playNextInQueue();
+        source.onended = () => {
+            currentAudioSourceRef.current = null;
+            playNextInQueue();
+        };
+        currentAudioSourceRef.current = source;
         source.start();
     };
 
@@ -177,11 +182,12 @@ export function useLiveAPI(experience: string = "Unknown", inventory: string[] =
     const connect = useCallback(async (projectOverride?: ActiveProjectContext) => {
         setIsConnecting(true);
         try {
+            // Instantiate AudioContext synchronously to prevent iOS Safari from suspending it silently
+            audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
+            
             const newStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
             streamRef.current = newStream;
             setStream(newStream);
-            
-            audioContextRef.current = new window.AudioContext({ sampleRate: 16000 });
             
             // Connect WebSocket with context injected into the query params
             const queryObj: Record<string, string> = {
@@ -216,6 +222,16 @@ export function useLiveAPI(experience: string = "Unknown", inventory: string[] =
                 if (typeof data === 'string') {
                     try {
                         const parsed = JSON.parse(data);
+                        
+                        // If the agent is interrupted by user speech, flush the queue instantly
+                        if (parsed.serverContent?.interrupted) {
+                            audioQueueRef.current = []; // Clear pending chunks
+                            if (currentAudioSourceRef.current) {
+                                currentAudioSourceRef.current.stop(); // Stop current playing 
+                                currentAudioSourceRef.current = null;
+                            }
+                        }
+
                         if (parsed.serverContent && parsed.serverContent.modelTurn) {
                             const parts = parsed.serverContent.modelTurn.parts;
                             for (const part of parts) {

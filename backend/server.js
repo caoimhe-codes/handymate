@@ -139,7 +139,7 @@ wss.on('connection', async (clientWs, req) => {
         }
         
         baseInstructions += `\n\n[RESUMING EXISTING TASK]: The user is resuming a previously paused task. The task summary is: "${activeProjectSummary}". The steps previously generated for this task are:\n${stepsStr}\nUse this context to seamlessly pick up where they left off.`;
-        initialGreeting = `"Hello! I am ready. Please introduce yourself as HandyMate and acknowledge that we are resuming work on: ${activeProjectSummary}."`;
+        initialGreeting = `Hello! I am ready. Please introduce yourself and acknowledge that we are resuming work on the project.`;
         console.log(`[Rehydrating Active Project Context]: ${activeProjectSummary}`);
     }
     
