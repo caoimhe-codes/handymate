@@ -269,7 +269,7 @@ export default function OnboardingPage() {
                       ) : (
                           <>
                               <label className="flex items-center justify-center bg-teal-800/50 hover:bg-teal-700/60 border border-teal-600/30 text-teal-300 rounded-lg px-2.5 py-2 cursor-pointer transition-colors" title="Upload Photo">
-                                  <input type="file" accept="image/*" className="hidden" onChange={handleInlineImageScan} />
+                                  <input type="file" accept="image/*" capture="environment" className="hidden" onChange={handleInlineImageScan} />
                                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
                                   </svg>
