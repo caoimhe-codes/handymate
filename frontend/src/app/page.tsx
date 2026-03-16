@@ -161,16 +161,20 @@ export default function Home() {
         e.target.value = ""; // reset input
     };
 
+    useEffect(() => {
+        if (isScanningTools && scanVideoRef.current && scanStream) {
+            scanVideoRef.current.srcObject = scanStream;
+        }
+    }, [isScanningTools, scanStream]);
+
     const startScannerCamera = async () => {
         try {
+            setIsScanningTools(true);
             const newStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
             setScanStream(newStream);
-            if (scanVideoRef.current) {
-                scanVideoRef.current.srcObject = newStream;
-            }
-            setIsScanningTools(true);
         } catch (err) {
             console.error("Failed to access camera", err);
+            setIsScanningTools(false);
             alert("Could not access your camera. Please ensure permissions are granted or use the manual search or photo upload.");
         }
     };
