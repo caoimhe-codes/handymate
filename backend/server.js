@@ -85,7 +85,7 @@ app.post('/api/detect-tools', async (req, res) => {
              return res.status(400).json({ error: "Missing imageBase64 payload" });
         }
 
-        const prompt = "List all DIY tools, hardware, or materials visible in this image. Return ONLY a JSON array of strings, e.g. ['Hammer', 'Wrench', 'Duct Tape']. Do not wrap the response in markdown blocks.";
+        const prompt = "Look extremely closely at this image. Identify any and all DIY tools, hardware, or materials (e.g. Hammer, Screws, Wrench, Pliers, Nails, Tape, Drill, etc.). Even if the tool is blurry, held in a hand, or partially obscured, list it. Return ONLY a JSON array of strings, e.g. ['Hammer', 'Wrench', 'Duct Tape']. Do not wrap the response in markdown blocks.";
 
         const response = await ai.models.generateContent({
             model: "gemini-2.5-flash",

@@ -273,6 +273,16 @@ export function useLiveAPI(experience: string = "Unknown", inventory: string[] =
             streamRef.current.getTracks().forEach((track) => {
                 track.enabled = !paused;
             });
+            
+            // If the user clicks Pause, instantly kill any ongoing AI speech
+            if (paused) {
+                audioQueueRef.current = [];
+                if (currentAudioSourceRef.current) {
+                    currentAudioSourceRef.current.stop();
+                    currentAudioSourceRef.current = null;
+                }
+            }
+            
             setIsPaused(paused);
         }
     }, [isPaused]);
