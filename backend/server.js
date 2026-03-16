@@ -70,8 +70,8 @@ app.post('/api/summarize', async (req, res) => {
             }
         });
 
-        const jsonStr = response.text.trim();
-        res.json(JSON.parse(jsonStr));
+        const cleanText = response.text.replace(/```(json)?/gi, '').trim();
+        res.json(JSON.parse(cleanText));
     } catch (e) {
         console.error("Summary Generation Error:", e);
         res.status(500).json({ error: "Failed to generate summary" });
