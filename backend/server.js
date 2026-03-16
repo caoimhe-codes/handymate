@@ -88,7 +88,7 @@ app.post('/api/detect-tools', async (req, res) => {
         const prompt = "List all DIY tools, hardware, or materials visible in this image. Return ONLY a JSON array of strings, e.g. ['Hammer', 'Wrench', 'Duct Tape']. Do not wrap the response in markdown blocks.";
 
         const response = await ai.models.generateContent({
-            model: "gemini-1.5-flash",
+            model: "gemini-2.5-flash",
             contents: [
                 prompt,
                 {
@@ -103,8 +103,8 @@ app.post('/api/detect-tools', async (req, res) => {
             }
         });
 
-        const jsonStr = response.text.trim();
-        res.json(JSON.parse(jsonStr));
+        const cleanText = response.text.replace(/```(json)?/gi, '').trim();
+        res.json(JSON.parse(cleanText));
     } catch (e) {
         console.error("Tool Detection Error:", e);
         res.status(500).json({ error: "Failed to detect tools from image" });
