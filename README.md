@@ -6,10 +6,10 @@
 
 ---
 
-## The Problem
+## Inspiration
 DIY projects can be incredibly rewarding, but they often start (and end) with frustration. When you're mid-repair and realize you're doing something wrong, YouTube tutorials can only help so much—they can't look at your specific leaky pipe and tell you exactly what you've missed. Hardware store runs are frequent because of poor planning, and calling out a contractor for a 15-minute fix is prohibitively expensive. 
 
-## The Solution
+## What it does
 **HandyMate** is a real-time, multimodal AI contractor that lives in your browser. Powered by the **Gemini 2.5 Flash Native Audio** model and **Google's Realtime Live API**, HandyMate doesn't just talk to you—it *sees* what you're doing.
 
 You simply open the web app, set your phone up, and show HandyMate the problem. The agent instantly diagnoses the issue, asks clarifying questions in a natural, conversational tone, and guides you step-by-step through the repair.
@@ -73,7 +73,13 @@ sequenceDiagram
 ### Challenges we ran into
 The most significant hurdle was mapping the browser's local MediaStream into Google's strict `{ realtimeInput: { mediaChunks } }` format via an intermediary Node.js server. We initially achieved duplex audio, but the AI couldn't "see" the problem. We solved this by architecting a hidden Javascript loop in our custom `useLiveAPI` hook that draws the `<video>` stream onto a hidden `<canvas>`, compresses it to a JPEG, and fires a Base64 frame across the WebSocket every 1000ms alongside the audio buffer. 
 
-### What's next for HandyMate
+## Accomplishments that we're proud of
+We are incredibly proud of achieving true *multimodality* in a web browser without natively compiled apps. The fact that HandyMate can interrupt its own synthesized speech the millisecond you point your camera at a new tool or ask a clarifying question feels like magic. We are also proud of the dynamic Context Injection—saving a user's tool inventory to Firestore and seamlessly feeding it back into the Gemini Live API prompt during a completely separate session created a profoundly "stateful" feeling that regular LLMs lack.
+
+## What we learned
+We learned the intricacies of the WebAudio API and WebSocket buffering, particularly handling the subtle differences in how iOS Safari and Chrome manage AudioContext lifecycles. We also learned how incredibly fast the new Gemini 2.5 Flash Native Audio model truly is when properly fed PCM data instead of standard JSON REST payloads.
+
+## What's next for HandyMate: The Just-In-Time AI-Powered DIY Contractor
 - Native iOS and Android application wrapper.
 - Integration with local hardware store inventory APIs (e.g. Home Depot) to automatically build shopping carts when users lack the tools required for a diagnosis.
 - AR overlays projecting arrows directly onto the user's video feed.
