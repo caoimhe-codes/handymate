@@ -47,6 +47,12 @@ export default function Home() {
     );
     const videoRef = useRef<HTMLVideoElement>(null);
 
+    // Dashboard Live Scanner State
+    const scanVideoRef = useRef<HTMLVideoElement>(null);
+    const scanCanvasRef = useRef<HTMLCanvasElement>(null);
+    const [isScanningTools, setIsScanningTools] = useState(false);
+    const [scanStream, setScanStream] = useState<MediaStream | null>(null);
+
     useEffect(() => {
         if (typeof window !== "undefined") {
             const exp = localStorage.getItem("handymate_experience");
@@ -153,6 +159,76 @@ export default function Home() {
         };
         reader.readAsDataURL(file);
         e.target.value = ""; // reset input
+    };
+
+    const startScannerCamera = async () => {
+        try {
+            const newStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+            setScanStream(newStream);
+            if (scanVideoRef.current) {
+                scanVideoRef.current.srcObject = newStream;
+            }
+            setIsScanningTools(true);
+        } catch (err) {
+            console.error("Failed to access camera", err);
+            alert("Could not access your camera. Please ensure permissions are granted or use the manual search or photo upload.");
+        }
+    };
+
+    const stopScannerCamera = () => {
+        if (scanStream) {
+            scanStream.getTracks().forEach(track => track.stop());
+            setScanStream(null);
+        }
+        setIsScanningTools(false);
+    };
+
+    const captureScannerFrame = async () => {
+        if (!scanVideoRef.current || !scanCanvasRef.current || !userId) return;
+        
+        setIsScanningInline(true); // Reuse the loading state
+        
+        const video = scanVideoRef.current;
+        const canvas = scanCanvasRef.current;
+        const ctx = canvas.getContext("2d");
+        
+        const MAX_WIDTH = 800;
+        let width = video.videoWidth;
+        let height = video.videoHeight;
+        
+        if (width > MAX_WIDTH) {
+            height = Math.round((height * MAX_WIDTH) / width);
+            width = MAX_WIDTH;
+        }
+        
+        canvas.width = width;
+        canvas.height = height;
+        ctx?.drawImage(video, 0, 0, width, height);
+        
+        const base64Data = canvas.toDataURL("image/jpeg", 0.7).split(',')[1];
+        stopScannerCamera();
+        
+        try {
+            const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+            const res = await fetch(`${apiUrl}/api/detect-tools`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ imageBase64: base64Data })
+            });
+
+            if (!res.ok) throw new Error("API failed");
+            const detectedTools: string[] = await res.json();
+            if (Array.isArray(detectedTools) && detectedTools.length > 0) {
+                await handleAddTool(detectedTools);
+            } else {
+                alert("No tools detected in the image.");
+            }
+        } catch (err) {
+            console.error("Failed to analyze camera image", err);
+            alert("Failed to analyze image. Please try again or add tools manually.");
+        } finally {
+            setIsScanningInline(false);
+        }
     };
 
     const handleEndCall = () => {
@@ -312,14 +388,15 @@ export default function Home() {
                                         </svg>
                                         <span className="text-[11px] font-bold tracking-wide uppercase truncate">Upload</span>
                                     </label>
-                                    <label className="flex-1 flex items-center justify-center bg-teal-500/20 hover:bg-teal-500/40 border border-teal-500/30 text-teal-300 rounded-lg py-2 cursor-pointer transition-colors" title="Take Photo">
-                                        <input type="file" accept="image/*" capture="environment" className="hidden" onChange={handleInlineImageScan} />
+                                    <button 
+                                        onClick={startScannerCamera}
+                                        className="flex-1 flex items-center justify-center bg-teal-500/20 hover:bg-teal-500/40 border border-teal-500/30 text-teal-300 rounded-lg py-2 transition-colors" title="Take Photo">
                                         <svg className="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
                                         </svg>
                                         <span className="text-[11px] font-bold tracking-wide uppercase truncate">Camera</span>
-                                    </label>
+                                    </button>
                                 </div>
                             )}
                         </div>
@@ -619,6 +696,37 @@ export default function Home() {
                                 </div>
                             </>
                         )}
+                    </div>
+                </div>
+            )}
+            {/* Tool Scanner Modal */}
+            {isScanningTools && (
+                <div className="fixed inset-0 bg-black/90 z-[100] flex flex-col items-center justify-center p-4">
+                    <div className="w-full max-w-2xl bg-teal-950/80 p-6 rounded-[2rem] border border-teal-800/50 shadow-2xl relative">
+                        <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-3">
+                            <svg className="w-6 h-6 text-teal-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                            </svg>
+                            Live Tool Scanner
+                        </h2>
+                        <div className="rounded-2xl overflow-hidden border-2 border-teal-500 relative bg-black aspect-video shadow-[0_0_30px_rgba(20,184,166,0.2)]">
+                            <video ref={scanVideoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
+                            <canvas ref={scanCanvasRef} className="hidden" />
+                            <div className="absolute bottom-0 w-full p-4 bg-gradient-to-t from-black/80 to-transparent flex gap-3">
+                                <button 
+                                    onClick={stopScannerCamera}
+                                    className="flex-1 py-3 px-4 bg-teal-950/80 hover:bg-red-500/20 text-white hover:text-red-400 rounded-xl font-bold backdrop-blur-md transition-all border border-teal-800/50 hover:border-red-500/30"
+                                >
+                                    Cancel
+                                </button>
+                                <button 
+                                    onClick={captureScannerFrame}
+                                    className="flex-[2] py-3 px-4 bg-teal-500 hover:bg-teal-400 text-teal-950 rounded-xl font-black shadow-[0_0_20px_rgba(20,184,166,0.4)] transition-all flex items-center justify-center"
+                                >
+                                    Take Photo
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             )}

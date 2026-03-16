@@ -51,7 +51,7 @@ app.post('/api/summarize', async (req, res) => {
                 "title": "A short, catchy title (e.g. Fixing the Leaky Sink)",
                 "summary": "A 1-sentence summary of what was discussed.",
                 "status": "Either 'Completed' if they fixed it, or 'Pending Tools' if they need to acquire items first.",
-                "estimatedTime": "E.g. '30 minutes', '2 hours', or 'Unknown'",
+                "estimatedTime": "E.g. '15 mins', '1 hour'. You MUST provide a concrete time estimate based on standard contractor times. DO NOT output 'Unknown'.",
                 "toolsNeeded": ["Item 1 to buy/borrow", "Item 2"], 
                 "steps": [
                     "Step 1...",
