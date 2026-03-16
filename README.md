@@ -87,7 +87,7 @@ We learned the intricacies of the WebAudio API and WebSocket buffering, particul
 
 ---
 
-## 💻 Local Spin-up Instructions
+## 💻 Reproducible Testing Instructions
 To run this project locally for judging or development:
 
 1. **Clone the repository:**
