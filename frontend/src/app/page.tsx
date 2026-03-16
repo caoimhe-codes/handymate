@@ -526,7 +526,7 @@ export default function Home() {
                                             {hasValidContent && (
                                                 <div className={`overflow-hidden transition-all duration-500 ease-in-out ${isExpanded ? 'max-h-[1200px] opacity-100 mt-5' : 'max-h-0 opacity-0'}`}>
                                                     <div className="bg-teal-950/50 rounded-2xl p-5 border border-teal-800/50 shadow-inner">
-                                                        <div className="space-y-3 relative before:absolute before:inset-0 before:ml-[11px] before:-translate-x-px before:h-full before:w-0.5 before:bg-gradient-to-b before:from-teal-500/50 before:via-teal-500/20 before:to-transparent">
+                                                        <div className="space-y-3">
                                                         {proj.steps?.map((step: string, index: number) => (
                                                                 <li key={index} className="text-sm text-teal-50 flex gap-4 leading-relaxed">
                                                                     <span className="flex-shrink-0 w-6 h-6 rounded-full bg-teal-800/50 text-teal-400 flex items-center justify-center font-bold text-xs">{index+1}</span>
