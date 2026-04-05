@@ -16,15 +16,18 @@ if (!GEMINI_API_KEY) {
 }
 
 // Initialize the Google Gen AI SDK
-const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
+const ai = new GoogleGenAI({ 
+    apiKey: GEMINI_API_KEY,
+    httpOptions: { apiVersion: 'v1alpha' }
+});
 
 const app = express();
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
 
 app.post('/api/summarize', async (req, res) => {
     try {
-        const { transcript, experience, inventory, previousSummary, previousSteps } = req.body;
+        const { transcript, agentAudioChunks, experience, inventory, previousSummary, previousSteps } = req.body;
         
         let prompt = `
             You are HandyMate, an expert contractor.
@@ -62,9 +65,34 @@ app.post('/api/summarize', async (req, res) => {
             Do NOT wrap the output in markdown code blocks. Just return the raw JSON string.
         `;
 
+        const requestContents = [prompt];
+
+        // If we captured the agent's audio from the livestream, decode and combine the raw PCM buffers
+        if (agentAudioChunks && Array.isArray(agentAudioChunks) && agentAudioChunks.length > 0) {
+            try {
+                // Decode all individual base64 chunks to Buffers
+                const buffers = agentAudioChunks.map(chunk => Buffer.from(chunk, 'base64'));
+                // Concatenate into one massive PCM buffer
+                const combinedBuffer = Buffer.concat(buffers);
+                // Re-encode as a single flawless base64 string for the API part limit
+                const combinedBase64 = combinedBuffer.toString('base64');
+                
+                requestContents.push({
+                    inlineData: {
+                        mimeType: 'audio/pcm;rate=24000',
+                        data: combinedBase64
+                    }
+                });
+                
+                requestContents.push("Listen to the provided audio which contains what the HandyMate agent told the user during the call. Extremely important: extract any specific tools the agent told the user they would need from this audio and list them in 'toolsNeeded'. Combine what the agent said with the user transcript to generate the steps and summary.");
+            } catch(e) {
+                console.error("Failed to parse agent audio chunks", e);
+            }
+        }
+
         const response = await ai.models.generateContent({
             model: "gemini-2.5-flash",
-            contents: prompt,
+            contents: requestContents,
             config: {
                 responseMimeType: "application/json"
             }
@@ -126,7 +154,7 @@ wss.on('connection', async (clientWs, req) => {
 
     let session = null;
     
-    let baseInstructions = `You are HandyMate, an expert contractor with 30 years experience. Your tone is direct, encouraging, concise, and safety-focused. CRITICAL RULES: 1. You MUST introduce yourself as HandyMate the moment you connect. 2. Wait for user to show the problem. 3. Diagnose first. 4. Give instructions strictly one step at a time. 5. Politely interrupt if the user is seen making a mistake on camera. 6. If the user interrupts you, stop your current thought immediately, genuinely acknowledge the interruption, and address their new point directly without repeating the previous step.\n\nIMPORTANT CONTEXT: The user has a ${experience} DIY experience level. Tailor your explanations accordingly. They currently have the following tools available: ${inventory}. Try to suggest solutions using these tools first. If they do not have the necessary tools for the job, clearly list exactly what tools they need to buy or borrow before they can proceed.`;
+    let baseInstructions = `You are HandyMate, an expert AI contractor. You have 30 years of trade experience to draw upon natively, but DO NOT say you have 30 years of experience out loud to the user. Retain your personality as a trade professional. Your tone is direct, encouraging, concise, and safety-focused. CRITICAL RULES: 1. You MUST introduce yourself as HandyMate the moment you connect. 2. Wait for user to show the problem. 3. Diagnose first. 4. Give instructions strictly one step at a time. 5. Politely interrupt if the user is seen making a mistake on camera. 6. If the user interrupts you, stop your current thought immediately, genuinely acknowledge the interruption, and address their new point directly without repeating the previous step.\n\nIMPORTANT CONTEXT: The user has a ${experience} DIY experience level. Tailor your explanations accordingly. They currently have the following tools available: ${inventory}. Try to suggest solutions using these tools first. If they do not have the necessary tools for the job, clearly list exactly what tools they need to buy or borrow before they can proceed.`;
     let initialGreeting = "Hello! I am ready. Please introduce yourself as HandyMate and ask how you can help me.";
 
     if (activeProjectSummary) {
@@ -146,7 +174,8 @@ wss.on('connection', async (clientWs, req) => {
     try {
         // Connect via SDK instead of raw WebSockets!
         session = await ai.live.connect({
-            model: 'gemini-2.5-flash-native-audio-latest', // The new audio model released today
+            model: 'gemini-3.1-flash-live-preview', // True Bidi Multimodal API
+
             config: {
                 systemInstruction: {
                     parts: [{ 
@@ -169,21 +198,20 @@ wss.on('connection', async (clientWs, req) => {
                 },
                 onerror: (e) => {
                     console.error('SDK: Gemini WS error:', e);
+                    if (clientWs.readyState === clientWs.OPEN) {
+                        clientWs.send(JSON.stringify({ type: "close", reason: "backend dropped" }));
+                    }
                 },
                 onclose: (e) => {
                     console.log('SDK: Gemini Live API connection closed:', e);
+                    if (clientWs.readyState === clientWs.OPEN) {
+                        clientWs.send(JSON.stringify({ type: "close", reason: "backend dropped" }));
+                    }
                 }
             }
         });
         
-        // Kick off the conversation explicitly
-        session.sendClientContent({
-            turns: [{
-                parts: [{ text: initialGreeting }],
-                role: "user"
-            }],
-            turnComplete: true
-        });
+        // Do not use session.sendClientContent, it throws 1007 Invalid Argument on gemini-3.1-flash-live-preview
     } catch (err) {
         console.error("Failed to connect to Live API SDK:", err);
         clientWs.close();
@@ -193,20 +221,19 @@ wss.on('connection', async (clientWs, req) => {
     clientWs.on('message', (data) => {
         try {
             const parsed = JSON.parse(data);
-            // console.log("Received client payload with keys:", Object.keys(parsed));
-            if (parsed.realtimeInput && parsed.realtimeInput.mediaChunks) {
-                const chunk = parsed.realtimeInput.mediaChunks[0];
-                if (chunk.mimeType.startsWith('image/')) {
-                    console.log(`-> received video frame: ${chunk.data.length} bytes`);
+            // Logging for debugging media payloads
+            if (parsed.realtimeInput) {
+                if (parsed.realtimeInput.video) {
+                    // process.stdout.write('+'); // Plus for video frames
+                } else if (parsed.realtimeInput.audio) {
+                    process.stdout.write('.'); // Dot for audio frames
                 }
             }
-            
             // Re-route the standard JSON payloads from React to the SDK's strong-typed methods
-            if (session) {
-                if (parsed.realtimeInput && parsed.realtimeInput.mediaChunks && parsed.realtimeInput.mediaChunks.length > 0) {
-                    session.sendRealtimeInput({
-                        media: parsed.realtimeInput.mediaChunks // Pass the full array as 'media', which the SDK maps to 'mediaChunks'
-                    });
+            if (session && session.conn) {
+                if (parsed.realtimeInput && (parsed.realtimeInput.audio || parsed.realtimeInput.video)) {
+                    // Bypassing broken SDK abstraction that drops flat realtimeInput payloads!
+                    session.conn.send(JSON.stringify(parsed));
                 } else if (parsed.clientContent) {
                     session.sendClientContent(parsed.clientContent);
                 } else if (parsed.toolResponse) {

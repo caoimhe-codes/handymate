@@ -1,0 +1,26 @@
+[dotenv@17.3.1] injecting env (1) from .env -- tip: ⚙️  specify custom .env file path with { path: '/custom/path/.env' }
+
+Testing gemini-2.0-flash on v1alpha...
+   [CLOSED]: 1008 - models/gemini-2.0-flash is not found for API version v1beta, or is not supported for bidiGenerateContent. Call ListModels t
+
+Testing gemini-2.0-flash-exp on v1alpha...
+   [CLOSED]: 1008 - models/gemini-2.0-flash-exp is not found for API version v1beta, or is not supported for bidiGenerateContent. Call ListMode
+
+Testing gemini-3.1-flash-live-preview on v1alpha...
+file:///Users/caoimhenicantsaoir/Documents/3.%20RevGen/2.%20Lonru%CC%81%20Consulting%20etc./2.%20Lonru%CC%81%20Studios/3.%20Google%20Gemini%20Live%20Agent%20Challenge/handymate/backend/node_modules/@google/genai/dist/node/index.mjs:13222
+    onmessage(serverMessage);
+    ^
+
+TypeError: onmessage is not a function
+    at handleWebSocketMessage (file:///Users/caoimhenicantsaoir/Documents/3.%20RevGen/2.%20Lonru%CC%81%20Consulting%20etc./2.%20Lonru%CC%81%20Studios/3.%20Google%20Gemini%20Live%20Agent%20Challenge/handymate/backend/node_modules/@google/genai/dist/node/index.mjs:13222:5)
+    at WebSocket.onmessage (file:///Users/caoimhenicantsaoir/Documents/3.%20RevGen/2.%20Lonru%CC%81%20Consulting%20etc./2.%20Lonru%CC%81%20Studios/3.%20Google%20Gemini%20Live%20Agent%20Challenge/handymate/backend/node_modules/@google/genai/dist/node/index.mjs:13340:22)
+    at callListener (/Users/caoimhenicantsaoir/Documents/3. RevGen/2. Lonrú Consulting etc./2. Lonrú Studios/3. Google Gemini Live Agent Challenge/handymate/backend/node_modules/ws/lib/event-target.js:290:14)
+    at WebSocket.onMessage (/Users/caoimhenicantsaoir/Documents/3. RevGen/2. Lonrú Consulting etc./2. Lonrú Studios/3. Google Gemini Live Agent Challenge/handymate/backend/node_modules/ws/lib/event-target.js:209:9)
+    at WebSocket.emit (node:events:519:28)
+    at Receiver.receiverOnMessage (/Users/caoimhenicantsaoir/Documents/3. RevGen/2. Lonrú Consulting etc./2. Lonrú Studios/3. Google Gemini Live Agent Challenge/handymate/backend/node_modules/ws/lib/websocket.js:1225:20)
+    at Receiver.emit (node:events:519:28)
+    at Receiver.dataMessage (/Users/caoimhenicantsaoir/Documents/3. RevGen/2. Lonrú Consulting etc./2. Lonrú Studios/3. Google Gemini Live Agent Challenge/handymate/backend/node_modules/ws/lib/receiver.js:569:14)
+    at Receiver.getData (/Users/caoimhenicantsaoir/Documents/3. RevGen/2. Lonrú Consulting etc./2. Lonrú Studios/3. Google Gemini Live Agent Challenge/handymate/backend/node_modules/ws/lib/receiver.js:496:10)
+    at Receiver.startLoop (/Users/caoimhenicantsaoir/Documents/3. RevGen/2. Lonrú Consulting etc./2. Lonrú Studios/3. Google Gemini Live Agent Challenge/handymate/backend/node_modules/ws/lib/receiver.js:167:16)
+
+Node.js v20.16.0

@@ -1,0 +1,20 @@
+[dotenv@17.3.1] injecting env (1) from .env -- tip: ⚙️  write to custom object with { processEnv: myObject }
+
+Testing gemini-2.0-flash on v1alpha...
+file:///Users/caoimhenicantsaoir/Documents/3.%20RevGen/2.%20Lonru%CC%81%20Consulting%20etc./2.%20Lonru%CC%81%20Studios/3.%20Google%20Gemini%20Live%20Agent%20Challenge/handymate/backend/test-live-full.js:36
+                                session.sendClientContent({
+                                ^
+
+ReferenceError: Cannot access 'session' before initialization
+    at Object.onopen (file:///Users/caoimhenicantsaoir/Documents/3.%20RevGen/2.%20Lonru%CC%81%20Consulting%20etc./2.%20Lonru%CC%81%20Studios/3.%20Google%20Gemini%20Live%20Agent%20Challenge/handymate/backend/test-live-full.js:36:33)
+    at WebSocket.onopenAwaitedCallback (file:///Users/caoimhenicantsaoir/Documents/3.%20RevGen/2.%20Lonru%CC%81%20Consulting%20etc./2.%20Lonru%CC%81%20Studios/3.%20Google%20Gemini%20Live%20Agent%20Challenge/handymate/backend/node_modules/@google/genai/dist/node/index.mjs:13333:131)
+    at callListener (/Users/caoimhenicantsaoir/Documents/3. RevGen/2. Lonrú Consulting etc./2. Lonrú Studios/3. Google Gemini Live Agent Challenge/handymate/backend/node_modules/ws/lib/event-target.js:290:14)
+    at WebSocket.onOpen (/Users/caoimhenicantsaoir/Documents/3. RevGen/2. Lonrú Consulting etc./2. Lonrú Studios/3. Google Gemini Live Agent Challenge/handymate/backend/node_modules/ws/lib/event-target.js:237:9)
+    at WebSocket.emit (node:events:519:28)
+    at WebSocket.setSocket (/Users/caoimhenicantsaoir/Documents/3. RevGen/2. Lonrú Consulting etc./2. Lonrú Studios/3. Google Gemini Live Agent Challenge/handymate/backend/node_modules/ws/lib/websocket.js:252:10)
+    at ClientRequest.<anonymous> (/Users/caoimhenicantsaoir/Documents/3. RevGen/2. Lonrú Consulting etc./2. Lonrú Studios/3. Google Gemini Live Agent Challenge/handymate/backend/node_modules/ws/lib/websocket.js:1017:15)
+    at ClientRequest.emit (node:events:519:28)
+    at TLSSocket.socketOnData (node:_http_client:580:11)
+    at TLSSocket.emit (node:events:519:28)
+
+Node.js v20.16.0

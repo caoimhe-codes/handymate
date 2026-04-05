@@ -11,13 +11,16 @@ export function useLiveAPI(experience: string = "Unknown", inventory: string[] =
     const [connected, setConnected] = useState(false);
     const [isConnecting, setIsConnecting] = useState(false);
     const [isPaused, setIsPaused] = useState(false);
+    const [facingMode, setFacingMode] = useState<"user" | "environment">("user");
     const transcriptRef = useRef<string>("");
+    const agentAudioChunksRef = useRef<string[]>([]);
     
     const wsRef = useRef<WebSocket | null>(null);
     const audioContextRef = useRef<AudioContext | null>(null);
     const [stream, setStream] = useState<MediaStream | null>(null);
     const streamRef = useRef<MediaStream | null>(null);
     const videoIntervalRef = useRef<NodeJS.Timeout | null>(null);
+    const recognitionRef = useRef<any>(null);
 
     // Queue to hold incoming Gemini phonetic audio buffers so they play sequentially
     const audioQueueRef = useRef<AudioBuffer[]>([]);
@@ -84,6 +87,10 @@ export function useLiveAPI(experience: string = "Unknown", inventory: string[] =
             audioContextRef.current.close();
             audioContextRef.current = null;
         }
+        if (recognitionRef.current) {
+            try { recognitionRef.current.stop(); } catch(e) {}
+            recognitionRef.current = null;
+        }
         setConnected(false);
     }, []);
 
@@ -96,6 +103,9 @@ export function useLiveAPI(experience: string = "Unknown", inventory: string[] =
         
         processor.onaudioprocess = (e) => {
             if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
+            // Prevent attempting to send audio if paused
+            if (isPaused) return;
+
             const inputData = e.inputBuffer.getChannelData(0);
             
             // convert Float32 to Int16
@@ -115,10 +125,10 @@ export function useLiveAPI(experience: string = "Unknown", inventory: string[] =
 
             const message = {
                 realtimeInput: {
-                    mediaChunks: [{
+                    audio: {
                         mimeType: 'audio/pcm;rate=16000',
                         data: base64
-                    }]
+                    }
                 }
             };
             wsRef.current.send(JSON.stringify(message));
@@ -132,7 +142,7 @@ export function useLiveAPI(experience: string = "Unknown", inventory: string[] =
         hiddenVideo.autoplay = true;
         hiddenVideo.playsInline = true;
         hiddenVideo.muted = true;
-        hiddenVideo.srcObject = stream;
+        hiddenVideo.srcObject = streamRef.current; // Bind directly to the ref so camera swaps don't break the frame extraction!
         
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d');
@@ -158,7 +168,8 @@ export function useLiveAPI(experience: string = "Unknown", inventory: string[] =
         videoIntervalRef.current = setInterval(() => {
             if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
             
-            const videoTrack = stream.getVideoTracks()[0];
+            // Check streamRef instead of the frozen stream parameter
+            const videoTrack = streamRef.current?.getVideoTracks()[0];
             if (!videoTrack || !videoTrack.enabled) return; // Do not send disabled frames
             
             if (hiddenVideo.readyState >= 2 && ctx) {
@@ -168,10 +179,10 @@ export function useLiveAPI(experience: string = "Unknown", inventory: string[] =
                 
                 wsRef.current.send(JSON.stringify({
                     realtimeInput: {
-                        mediaChunks: [{
+                        video: {
                             mimeType: 'image/jpeg',
                             data: base64Image
-                        }]
+                        }
                     }
                 }));
             }
@@ -185,7 +196,9 @@ export function useLiveAPI(experience: string = "Unknown", inventory: string[] =
             // Instantiate AudioContext synchronously to prevent iOS Safari from suspending it silently
             audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
             
-            const newStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+            const newStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: { facingMode } })
+                .catch(() => navigator.mediaDevices.getUserMedia({ audio: true, video: true })); // fallback if precise facingMode fails
+                
             streamRef.current = newStream;
             setStream(newStream);
             
@@ -209,8 +222,41 @@ export function useLiveAPI(experience: string = "Unknown", inventory: string[] =
                 setConnected(true);
                 setIsConnecting(false);
                 transcriptRef.current = ""; // clear transcript on new call
+                agentAudioChunksRef.current = []; // clear previous audio chunks
                 console.log('Connected to backend WebSocket');
                 startStreaming(newStream);
+
+                // Start local speech recognition to build a transcript for the summary generator
+                // (Since Gemini 3.1 Live API strictly returns audio chunks without text echoes)
+                const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+                if (SpeechRecognition) {
+                    const recognition = new SpeechRecognition();
+                    recognition.continuous = true;
+                    recognition.interimResults = false;
+                    recognition.lang = 'en-US';
+                    
+                    recognition.onresult = (event: any) => {
+                        for (let i = event.resultIndex; i < event.results.length; i++) {
+                            if (event.results[i].isFinal) {
+                                transcriptRef.current += " " + event.results[i][0].transcript;
+                            }
+                        }
+                    };
+                    
+                    recognition.onend = () => {
+                        // Keep it continuous if we're still connected and not paused
+                        if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+                            try { recognition.start(); } catch(e){}
+                        }
+                    };
+                    
+                    try {
+                        recognition.start();
+                        recognitionRef.current = recognition;
+                    } catch (e) {
+                         console.warn("Speech recognition failed to start", e);
+                    }
+                }
             };
 
             wsRef.current.onmessage = async (event) => {
@@ -223,6 +269,13 @@ export function useLiveAPI(experience: string = "Unknown", inventory: string[] =
                     try {
                         const parsed = JSON.parse(data);
                         
+                        if (parsed.type === "close") {
+                            console.warn("Backend proxied close event:", parsed.reason);
+                            setConnected(false);
+                            stopStreaming();
+                            return;
+                        }
+
                         // If the agent is interrupted by user speech, flush the queue instantly
                         if (parsed.serverContent?.interrupted) {
                             audioQueueRef.current = []; // Clear pending chunks
@@ -237,6 +290,7 @@ export function useLiveAPI(experience: string = "Unknown", inventory: string[] =
                             for (const part of parts) {
                                 if (part.inlineData && part.inlineData.mimeType.startsWith('audio/pcm')) {
                                     playPcmAudio(part.inlineData.data);
+                                    agentAudioChunksRef.current.push(part.inlineData.data); // save for summary pipeline!
                                 } else if (part.text) {
                                     transcriptRef.current += " " + part.text;
                                 }
@@ -281,12 +335,48 @@ export function useLiveAPI(experience: string = "Unknown", inventory: string[] =
                     currentAudioSourceRef.current.stop();
                     currentAudioSourceRef.current = null;
                 }
+                if (recognitionRef.current) {
+                    try { recognitionRef.current.stop(); } catch(e){}
+                }
+            } else {
+                if (recognitionRef.current) {
+                    try { recognitionRef.current.start(); } catch(e){}
+                }
             }
             
             setIsPaused(paused);
         }
     }, [isPaused]);
 
+    const switchCamera = useCallback(async () => {
+        if (!streamRef.current) return;
+        
+        try {
+            const currentVideoTrack = streamRef.current.getVideoTracks()[0];
+            const newMode = facingMode === "user" ? "environment" : "user";
+            
+            const tempStream = await navigator.mediaDevices.getUserMedia({
+                video: { facingMode: { exact: newMode } }
+            }).catch(() => navigator.mediaDevices.getUserMedia({
+                video: { facingMode: newMode } // fallback
+            }));
+            
+            const newVideoTrack = tempStream.getVideoTracks()[0];
+            
+            streamRef.current.removeTrack(currentVideoTrack);
+            currentVideoTrack.stop();
+            streamRef.current.addTrack(newVideoTrack);
+            
+            // Create a new strict reference to trigger React re-renders correctly
+            const newStreamObj = new MediaStream(streamRef.current.getTracks());
+            setStream(newStreamObj);
+            streamRef.current = newStreamObj;
+            setFacingMode(newMode);
+            
+        } catch (e) {
+            console.error("Failed to switch camera", e);
+        }
+    }, [facingMode]);
 
-    return { connected, connect, disconnect, stream, transcriptRef, isPaused, togglePause, isConnecting };
+    return { connected, connect, disconnect, stream, transcriptRef, agentAudioChunksRef, isPaused, togglePause, isConnecting, switchCamera };
 }

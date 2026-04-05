@@ -1,0 +1,4 @@
+[dotenv@17.3.1] injecting env (1) from .env -- tip: ⚙️  override existing env vars with { override: true }
+
+Testing gemini-2.0-flash with v1alpha...
+>>> SUCCESS: [gemini-2.0-flash / v1alpha]

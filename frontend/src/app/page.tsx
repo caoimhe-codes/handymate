@@ -6,6 +6,9 @@ import { useRouter } from "next/navigation";
 import { db } from "@/lib/firebase/config";
 import { collection, addDoc, onSnapshot, query, orderBy, doc, updateDoc } from "firebase/firestore";
 import Image from "next/image";
+import { loginWithGoogle, logout } from "@/lib/firebase/auth";
+import { auth } from "@/lib/firebase/config";
+import { onAuthStateChanged } from "firebase/auth";
 
 interface Project {
     id: string;
@@ -40,7 +43,7 @@ export default function Home() {
     const [activeProject, setActiveProject] = useState<Project | null>(null);
 
     // Pass the context to the hook so it can send it to the backend
-    const { connected, connect, disconnect, stream, transcriptRef, isPaused, togglePause, isConnecting } = useLiveAPI(
+    const { connected, connect, disconnect, stream, transcriptRef, agentAudioChunksRef, isPaused, togglePause, isConnecting, switchCamera } = useLiveAPI(
         experience, 
         inventory, 
         activeProject ? { summary: activeProject.summary, steps: activeProject.steps } : null
@@ -53,23 +56,41 @@ export default function Home() {
     const [isScanningTools, setIsScanningTools] = useState(false);
     const [scanStream, setScanStream] = useState<MediaStream | null>(null);
 
+    const [isAuthenticated, setIsAuthenticated] = useState(false);
+    const [authChecking, setAuthChecking] = useState(true);
+
     useEffect(() => {
-        if (typeof window !== "undefined") {
-            const exp = localStorage.getItem("handymate_experience");
-            const inv = localStorage.getItem("handymate_inventory");
-            if (!exp || !inv) {
-                // Force onboarding if they haven't done it
-                router.push("/onboarding");
-                return;
+        const unsubscribe = onAuthStateChanged(auth, async (user) => {
+            if (user) {
+                setUserId(user.uid);
+                setIsAuthenticated(true);
+                
+                // If they have local data but no cloud profile, or vice versa
+                const exp = localStorage.getItem("handymate_experience");
+                const inv = localStorage.getItem("handymate_inventory");
+                
+                if (!exp || !inv) {
+                    router.push("/onboarding");
+                } else {
+                    setExperience(exp);
+                    setInventory(JSON.parse(inv));
+                }
+            } else {
+                setUserId(null);
+                setIsAuthenticated(false);
             }
-            
-            setExperience(exp);
-            
-            setInventory(JSON.parse(inv));
-            
-            setUserId(localStorage.getItem("handymate_user_id"));
-        }
+            setAuthChecking(false);
+        });
+        return () => unsubscribe();
     }, [router]);
+
+    const handleLogin = async () => {
+        try {
+            await loginWithGoogle();
+        } catch (e) {
+            console.error("Login failed", e);
+        }
+    };
 
     // Listen to Firebase Projects
     useEffect(() => {
@@ -239,7 +260,9 @@ export default function Home() {
         disconnect();
         // Do not clear activeProject here yet so it can be passed to the summary generation!
         const currentTranscript = transcriptRef.current;
-        if (currentTranscript && currentTranscript.trim().length > 10) {
+        const hasAgentAudio = agentAudioChunksRef.current && agentAudioChunksRef.current.length > 0;
+        
+        if ((currentTranscript && currentTranscript.trim().length > 10) || hasAgentAudio) {
             handleGenerateSummary(currentTranscript);
         } else {
             setShowSummaryModal(true);
@@ -262,6 +285,7 @@ export default function Home() {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     transcript: textToSummarize,
+                    agentAudioChunks: agentAudioChunksRef.current, // Pass the captured agent audio
                     experience,
                     inventory: inventory.join(", "),
                     activeProjectId: activeProject?.id,
@@ -301,6 +325,23 @@ export default function Home() {
         }
     }, [stream]);
 
+    if (authChecking) {
+        return <div className="min-h-screen bg-teal-950 flex items-center justify-center text-teal-400 font-bold tracking-widest uppercase">Initializing Agent Securely...</div>;
+    }
+
+    if (!isAuthenticated) {
+        return (
+            <div className="min-h-screen bg-teal-950 flex flex-col items-center justify-center p-6 text-center font-sans">
+                 <Image src="/logo.png" alt="Logo" width={100} height={100} className="mb-8 rounded-3xl shadow-2xl" />
+                 <h1 className="text-3xl font-extrabold text-white mb-4 tracking-tight">Handy<span className="text-teal-400">Mate</span> v2</h1>
+                 <p className="text-teal-200/80 mb-8 max-w-md leading-relaxed text-sm">We've upgraded to a secure cloud database. Please sign in with Google to sync your DIY tools and repair history securely across your devices.</p>
+                 <button onClick={handleLogin} className="px-8 py-4 bg-white text-teal-950 rounded-2xl font-black text-lg shadow-[0_0_30px_rgba(255,255,255,0.2)] hover:shadow-[0_0_40px_rgba(255,255,255,0.4)] hover:-translate-y-1 transition-all flex items-center gap-3">
+                     Sign in with Google
+                 </button>
+            </div>
+        );
+    }
+
     return (
         <div className="min-h-screen bg-teal-950 text-teal-50 flex overflow-hidden font-sans">
             {/* Mobile Overlay */}
@@ -330,7 +371,7 @@ export default function Home() {
                 </div>
                 <div className="p-6 flex-1 overflow-y-auto relative z-10">
                     <div className="mb-8">
-                        <h2 className="text-[10px] uppercase tracking-widest text-teal-400/70 font-bold mb-3">AI Context Profile</h2>
+                        <h2 className="text-[10px] uppercase tracking-widest text-teal-400/70 font-bold mb-3">Agent Profile</h2>
                         <div className="bg-teal-950/50 rounded-xl p-4 border border-teal-800/50 shadow-inner">
                             <div className="text-xs text-teal-300/70 mb-1">Assumed Skill Level:</div>
                             <div className="font-semibold text-white flex items-center gap-2">
@@ -406,8 +447,11 @@ export default function Home() {
                         </div>
                     </div>
                 </div>
-                <div className="p-4 border-t border-teal-800/50 bg-teal-950/60 text-center relative z-10">
-                    <p className="text-[9px] text-teal-600/80 font-bold uppercase tracking-widest leading-relaxed">
+                <div className="p-4 border-t border-teal-800/50 bg-teal-950/60 flex flex-col gap-3 text-center relative z-10">
+                    <button onClick={async () => { await logout(); router.push('/'); }} className="text-xs font-bold text-red-400/80 hover:text-red-400 border border-red-500/30 hover:bg-red-500/10 rounded-xl py-2 transition-colors w-full">
+                        Sign Out
+                    </button>
+                    <p className="text-[9px] text-teal-600/80 font-bold uppercase tracking-widest leading-relaxed mt-1">
                         © 2026 Lonrú Consulting Ltd. <br/> Active Architecture™ Powered by Lonrú Studios™
                     </p>
                 </div>
@@ -442,7 +486,7 @@ export default function Home() {
                                 isPaused ? (
                                     <><span className="w-2.5 h-2.5 rounded-full bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.8)]"></span> Paused</>
                                 ) : (
-                                    <><span className="w-2.5 h-2.5 rounded-full bg-teal-400 animate-pulse shadow-[0_0_8px_rgba(45,212,191,0.8)]"></span> Agent Active</>
+                                    <><span className="w-2.5 h-2.5 rounded-full bg-teal-400 animate-pulse shadow-[0_0_8px_rgba(45,212,191,0.8)]"></span> Agent Ready. Say "Hello"!</>
                                 )
                             ) : (
                                 <><span className="w-2.5 h-2.5 rounded-full bg-teal-700"></span> Standing By</>
@@ -519,6 +563,24 @@ export default function Home() {
                                     )}
                                 </button>
                                 <button 
+                                    onClick={switchCamera}
+                                    className="px-8 py-5 border bg-teal-800/30 border-teal-600/30 hover:bg-teal-800/50 text-teal-300 rounded-2xl font-bold text-lg transition-all hover:-translate-y-1 active:translate-y-0 flex items-center gap-3 hidden md:flex"
+                                >
+                                    <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                                        <path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"/>
+                                    </svg>
+                                    Flip Camera
+                                </button>
+                                {/* Mobile-only flip button shortcut icon */}
+                                <button
+                                    onClick={switchCamera}
+                                    className="p-5 border bg-teal-800/30 border-teal-600/30 hover:bg-teal-800/50 text-teal-300 rounded-2xl transition-all hover:-translate-y-1 active:translate-y-0 flex md:hidden items-center justify-center"
+                                >
+                                    <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                                        <path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46C19.54 15.03 20 13.57 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74C4.46 8.97 4 10.43 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z"/>
+                                    </svg>
+                                </button>
+                                <button 
                                     onClick={handleEndCall}
                                     className="px-8 py-5 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 rounded-2xl font-bold text-lg transition-all hover:-translate-y-1 active:translate-y-0 flex items-center gap-3"
                                 >
@@ -568,7 +630,7 @@ export default function Home() {
                                                 </button>
                                             </div>
                                             
-                                            <p className="text-sm text-teal-200/60 mb-5 leading-relaxed">{proj.summary || "The AI encountered an error formatting this task. Please delete."}</p>
+                                            <p className="text-sm text-teal-200/60 mb-5 leading-relaxed">{proj.summary || "HandyMate encountered an error formatting this task. Please delete."}</p>
                                             
                                             {hasValidContent && (
                                                 <div className="grid grid-cols-2 gap-4 mb-5">
@@ -666,7 +728,7 @@ export default function Home() {
                         
                         {isGenerating && transcriptRef.current?.trim().length > 10 ? (
                             <div className="py-12 flex flex-col items-center justify-center">
-                                <span className="animate-pulse text-xl font-bold text-teal-300 mb-4 tracking-wide">Analyzing AI Transcript...</span>
+                                <span className="animate-pulse text-xl font-bold text-teal-300 mb-4 tracking-wide">Generating Action Plan...</span>
                                 <p className="text-teal-200/70 text-sm text-center max-w-xs">HandyMate is formatting a step-by-step diagnostic summary for your records.</p>
                             </div>
                         ) : (

@@ -1,0 +1,61 @@
+[dotenv@17.3.1] injecting env (1) from .env -- tip: ⚙️  load multiple .env files with { path: ['.env.local', '.env'] }
+
+Testing manual WS: v1alpha + models/gemini-2.0-flash-exp
+   [CLOSED]: 1008 - models/gemini-2.0-flash-exp is not found for API version v1alpha, or is not supported for bidiGenerateContent. Call ListMod
+
+Testing manual WS: v1alpha + models/gemini-2.0-flash
+   [CLOSED]: 1008 - models/gemini-2.0-flash is not found for API version v1alpha, or is not supported for bidiGenerateContent. Call ListModels 
+
+Testing manual WS: v1alpha + models/gemini-2.0-flash-001
+   [CLOSED]: 1008 - models/gemini-2.0-flash-001 is not found for API version v1alpha, or is not supported for bidiGenerateContent. Call ListMod
+
+Testing manual WS: v1alpha + gemini-2.0-flash-exp
+   [CLOSED]: 1008 - gemini-2.0-flash-exp is not found for API version v1alpha, or is not supported for bidiGenerateContent. Call ListModels to 
+
+Testing manual WS: v1alpha + gemini-2.0-flash
+   [CLOSED]: 1008 - gemini-2.0-flash is not found for API version v1alpha, or is not supported for bidiGenerateContent. Call ListModels to see 
+
+Testing manual WS: v1alpha + gemini-2.5-flash
+   [CLOSED]: 1008 - gemini-2.5-flash is not found for API version v1alpha, or is not supported for bidiGenerateContent. Call ListModels to see 
+
+Testing manual WS: v1beta + models/gemini-2.0-flash-exp
+   [CLOSED]: 1008 - models/gemini-2.0-flash-exp is not found for API version v1beta, or is not supported for bidiGenerateContent. Call ListMode
+
+Testing manual WS: v1beta + models/gemini-2.0-flash
+   [CLOSED]: 1008 - models/gemini-2.0-flash is not found for API version v1beta, or is not supported for bidiGenerateContent. Call ListModels t
+
+Testing manual WS: v1beta + models/gemini-2.0-flash-001
+   [CLOSED]: 1008 - models/gemini-2.0-flash-001 is not found for API version v1beta, or is not supported for bidiGenerateContent. Call ListMode
+
+Testing manual WS: v1beta + gemini-2.0-flash-exp
+   [CLOSED]: 1008 - gemini-2.0-flash-exp is not found for API version v1beta, or is not supported for bidiGenerateContent. Call ListModels to s
+
+Testing manual WS: v1beta + gemini-2.0-flash
+   [CLOSED]: 1008 - gemini-2.0-flash is not found for API version v1beta, or is not supported for bidiGenerateContent. Call ListModels to see t
+
+Testing manual WS: v1beta + gemini-2.5-flash
+   [CLOSED]: 1008 - gemini-2.5-flash is not found for API version v1beta, or is not supported for bidiGenerateContent. Call ListModels to see t
+
+Testing manual WS: v1 + models/gemini-2.0-flash-exp
+   [ERROR]: Unexpected server response: 404
+   [CLOSED]: 1006 - 
+
+Testing manual WS: v1 + models/gemini-2.0-flash
+   [ERROR]: Unexpected server response: 404
+   [CLOSED]: 1006 - 
+
+Testing manual WS: v1 + models/gemini-2.0-flash-001
+   [ERROR]: Unexpected server response: 404
+   [CLOSED]: 1006 - 
+
+Testing manual WS: v1 + gemini-2.0-flash-exp
+   [ERROR]: Unexpected server response: 404
+   [CLOSED]: 1006 - 
+
+Testing manual WS: v1 + gemini-2.0-flash
+   [ERROR]: Unexpected server response: 404
+   [CLOSED]: 1006 - 
+
+Testing manual WS: v1 + gemini-2.5-flash
+   [ERROR]: Unexpected server response: 404
+   [CLOSED]: 1006 - 
