@@ -106,7 +106,20 @@ export function useLiveAPI(experience: string = "Unknown", inventory: string[] =
             // Prevent attempting to send audio if paused
             if (isPaused) return;
 
-            const inputData = e.inputBuffer.getChannelData(0);
+            let inputData = e.inputBuffer.getChannelData(0);
+            
+            // iOS Safari often simply ignores the { sampleRate: 16000 } request and uses 48kHz.
+            // We must manually downsample the Float32Array before converting to Int16 PCM.
+            const currentRate = audioCtx.sampleRate;
+            if (currentRate !== 16000) {
+                const ratio = currentRate / 16000;
+                const newLength = Math.round(inputData.length / ratio);
+                const downsampled = new Float32Array(newLength);
+                for (let i = 0; i < newLength; i++) {
+                    downsampled[i] = inputData[Math.round(i * ratio)] || 0;
+                }
+                inputData = downsampled;
+            }
             
             // convert Float32 to Int16
             const pcm16 = new Int16Array(inputData.length);
@@ -193,8 +206,14 @@ export function useLiveAPI(experience: string = "Unknown", inventory: string[] =
     const connect = useCallback(async (projectOverride?: ActiveProjectContext) => {
         setIsConnecting(true);
         try {
-            // Instantiate AudioContext synchronously to prevent iOS Safari from suspending it silently
-            audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
+            // Instantiate AudioContext synchronously to prevent iOS Safari from suspending it
+            const TAudioContext = window.AudioContext || (window as any).webkitAudioContext;
+            audioContextRef.current = new TAudioContext({ sampleRate: 16000 });
+            
+            // Force resume BEFORE the async await drops the user gesture token
+            if (audioContextRef.current.state === 'suspended') {
+                audioContextRef.current.resume();
+            }
             
             const newStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: { facingMode } })
                 .catch(() => navigator.mediaDevices.getUserMedia({ audio: true, video: true })); // fallback if precise facingMode fails
