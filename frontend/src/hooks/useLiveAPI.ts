@@ -146,10 +146,17 @@ export function useLiveAPI(experience: string = "Unknown", inventory: string[] =
         const source = audioCtx.createMediaStreamSource(stream);
         const processor = audioCtx.createScriptProcessor(4096, 1, 1);
         
+        // Process microphone frames and send to Gemini
         processor.onaudioprocess = (e) => {
             if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
             // Prevent attempting to send audio if paused
             if (isPaused) return;
+
+            // [HALF-DUPLEX WALKIE TALKIE]
+            // If the AI is actively speaking out the speakers, do not send microphone frames!
+            // This natively prevents ambient speaker-bleed from triggering Gemini's hallucinated "interruption" logic,
+            // while bypassing the need for flawed volume noise gates that block legitimate speech!
+            if (isPlayingRef.current) return;
 
             let inputData = e.inputBuffer.getChannelData(0);
             
@@ -166,21 +173,10 @@ export function useLiveAPI(experience: string = "Unknown", inventory: string[] =
                 inputData = downsampled;
             }
             
-            let maxAmplitude = 0;
             // convert Float32 to Int16
             const pcm16 = new Int16Array(inputData.length);
             for (let i = 0; i < inputData.length; i++) {
-                if (Math.abs(inputData[i]) > maxAmplitude) {
-                    maxAmplitude = Math.abs(inputData[i]);
-                }
                 pcm16[i] = Math.max(-32768, Math.min(32767, inputData[i] * 32768));
-            }
-
-            // [NOISE GATE] Drop frames that are mere room ambient hum (below roughly 1.5% volume)
-            // If we blindly stream silence, the ambient noise out the speakers will instantly trigger 
-            // Gemini's strict "interruption" logic, cutting off its responses!
-            if (maxAmplitude < 0.015) {
-                return;
             }
             
             // Convert to base64
@@ -209,7 +205,6 @@ export function useLiveAPI(experience: string = "Unknown", inventory: string[] =
         dummyGain.gain.value = 0;
         source.connect(processor);
         processor.connect(dummyGain);
-        dummyGain.connect(audioCtx.destination);
 
         // --- Vision Loop / Hidden Canvas Extraction ---
         const hiddenVideo = document.createElement('video');
