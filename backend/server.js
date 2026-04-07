@@ -255,19 +255,9 @@ wss.on('connection', async (clientWs, req) => {
                     process.stdout.write('.'); // Dot for audio frames
                 }
             }
-            // Re-route the standard JSON payloads from React to the SDK's strong-typed methods
+            // Forward the exact raw JSON payload from the React frontend directly to the Google Live backend via raw socket injection
             if (session && session.conn) {
-                if (parsed.realtimeInput && (parsed.realtimeInput.audio || parsed.realtimeInput.video)) {
-                    // Map generic realtimeInput chunks to the proper mediaChunks schema expected by the SDK
-                    const chunks = [];
-                    if (parsed.realtimeInput.audio) chunks.push(parsed.realtimeInput.audio);
-                    if (parsed.realtimeInput.video) chunks.push(parsed.realtimeInput.video);
-                    session.conn.send(JSON.stringify({ realtimeInput: { mediaChunks: chunks } }));
-                } else if (parsed.clientContent) {
-                    session.conn.send(JSON.stringify({ clientContent: parsed.clientContent }));
-                } else if (parsed.toolResponse) {
-                    // Send tool response
-                }
+                session.conn.send(data.toString());
             }
         } catch (err) {
             console.error('Error parsing client message:', err);
