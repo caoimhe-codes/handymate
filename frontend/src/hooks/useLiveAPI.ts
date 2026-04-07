@@ -63,13 +63,45 @@ export function useLiveAPI(experience: string = "Unknown", inventory: string[] =
         for (let i = 0; i < pcm16.length; i++) {
             float32[i] = pcm16[i] / 32768.0;
         }
-        
-        const audioBuffer = audioCtx.createBuffer(1, float32.length, 24000); 
-        audioBuffer.getChannelData(0).set(float32);
-        
-        audioQueueRef.current.push(audioBuffer);
-        if (!isPlayingRef.current) {
-            playNextInQueue();
+
+        try {
+            // Hardware-based OS sniffing to circumvent "Request Desktop Website" user agent spoofing on iOS
+            // Apple explicitly unloads "ontouchend" when spoofing, so we MUST sniff maxTouchPoints at the GPU driver layer.
+            const isAppleTouch = typeof navigator !== 'undefined' && (
+                /iPad|iPhone|iPod/.test(navigator.userAgent) || 
+                (navigator.userAgent.includes("Mac") && navigator.maxTouchPoints > 1)
+            );
+            
+            const isMobile = isAppleTouch || (typeof navigator !== 'undefined' && /Mobi|Android/.test(navigator.userAgent));
+
+            if (isMobile && audioCtx.sampleRate !== 24000) {
+                // FALLBACK ONLY FOR MOBILE: Nearest-Neighbor resampling 
+                // This algorithm is mathematically identically to what successfully ran on Mobile in Turn 2.
+                // It cleanly bypasses all silent muting behavior on iOS Safari without complex APIs.
+                const targetRate = audioCtx.sampleRate;
+                const ratio = targetRate / 24000;
+                const newLength = Math.round(float32.length * ratio);
+                const finalBuffer = new Float32Array(newLength);
+                for (let i = 0; i < newLength; i++) {
+                    let srcIdx = Math.floor(i / ratio);
+                    if (srcIdx >= float32.length) srcIdx = float32.length - 1;
+                    finalBuffer[i] = float32[srcIdx];
+                }
+                
+                const fallbackBuffer = audioCtx.createBuffer(1, finalBuffer.length, targetRate);
+                fallbackBuffer.getChannelData(0).set(finalBuffer);
+                audioQueueRef.current.push(fallbackBuffer);
+            } else {
+                // PRIMARY: Native execution for Desktop Chrome
+                // This is mathematically strictly identical to what successfully ran on Laptop in Turn 1.
+                const audioBuffer = audioCtx.createBuffer(1, float32.length, 24000); 
+                audioBuffer.getChannelData(0).set(float32);
+                audioQueueRef.current.push(audioBuffer);
+            }
+
+            if (!isPlayingRef.current) playNextInQueue();
+        } catch (e) {
+            console.error("Critical playback error", e);
         }
     }, [playNextInQueue]);
 
@@ -108,14 +140,14 @@ export function useLiveAPI(experience: string = "Unknown", inventory: string[] =
 
             let inputData = e.inputBuffer.getChannelData(0);
             
-            // iOS Safari often simply ignores the { sampleRate: 16000 } request and uses 48kHz.
-            // We must manually downsample the Float32Array before converting to Int16 PCM.
-            const currentRate = audioCtx.sampleRate;
-            if (currentRate !== 16000) {
-                const ratio = currentRate / 16000;
-                const newLength = Math.round(inputData.length / ratio);
-                const downsampled = new Float32Array(newLength);
-                for (let i = 0; i < newLength; i++) {
+            // Apple iOS Safari often ignores hardware 16000Hz constraints natively and misreports sample rates.
+            // We forcefully downsample the input by calculating the physical target length mathematically 
+            // derived from the literal duration of the buffer frame, fully bypassing fraudulent `sampleRate` contexts.
+            const targetLength = Math.round(e.inputBuffer.duration * 16000);
+            if (inputData.length !== targetLength) {
+                const ratio = inputData.length / targetLength;
+                const downsampled = new Float32Array(targetLength);
+                for (let i = 0; i < targetLength; i++) {
                     downsampled[i] = inputData[Math.round(i * ratio)] || 0;
                 }
                 inputData = downsampled;
@@ -135,6 +167,8 @@ export function useLiveAPI(experience: string = "Unknown", inventory: string[] =
                 binary += String.fromCharCode(buffer[i]);
             }
             const base64 = window.btoa(binary);
+
+            if (!base64 || base64.length === 0) return;
 
             const message = {
                 realtimeInput: {
@@ -206,16 +240,30 @@ export function useLiveAPI(experience: string = "Unknown", inventory: string[] =
     const connect = useCallback(async (projectOverride?: ActiveProjectContext) => {
         setIsConnecting(true);
         try {
-            // Instantiate AudioContext synchronously to prevent iOS Safari from suspending it
+            // Instantiate AudioContext completely unconstrained to prevent Apple from artificially zero-ing out
+            // the hardware buffer streams under the hood. Our Javascript Nearest-Neighbor equations will natively process it.
             const TAudioContext = window.AudioContext || (window as any).webkitAudioContext;
-            audioContextRef.current = new TAudioContext({ sampleRate: 16000 });
+            audioContextRef.current = new TAudioContext();
             
+            // SUPER HACK FOR IOS: Play 10ms of pure silence immediately on the click thread
+            // This permanently unlocks the WebAudio API in mobile browsers
+            const unlockOsc = audioContextRef.current.createOscillator();
+            const unlockGain = audioContextRef.current.createGain();
+            unlockGain.gain.value = 0;
+            unlockOsc.connect(unlockGain);
+            unlockGain.connect(audioContextRef.current.destination);
+            unlockOsc.start();
+            unlockOsc.stop(audioContextRef.current.currentTime + 0.01);
+
             // Force resume BEFORE the async await drops the user gesture token
             if (audioContextRef.current.state === 'suspended') {
                 audioContextRef.current.resume();
             }
             
-            const newStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: { facingMode } })
+            const newStream = await navigator.mediaDevices.getUserMedia({ 
+                audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }, 
+                video: { facingMode } 
+            })
                 .catch(() => navigator.mediaDevices.getUserMedia({ audio: true, video: true })); // fallback if precise facingMode fails
                 
             streamRef.current = newStream;
@@ -243,6 +291,24 @@ export function useLiveAPI(experience: string = "Unknown", inventory: string[] =
                 transcriptRef.current = ""; // clear transcript on new call
                 agentAudioChunksRef.current = []; // clear previous audio chunks
                 console.log('Connected to backend WebSocket');
+                
+                // Force immediate introduction natively over the data channel to bypass any VAD dead-air delays
+                const setupMsg = {
+                    clientContent: {
+                        turns: [{
+                            role: "user",
+                            parts: [{ text: "Hello! I have a repair project. Please briefly introduce yourself and ask me how you can help." }]
+                        }],
+                        turnComplete: true
+                    }
+                };
+                wsRef.current?.send(JSON.stringify(setupMsg));
+                
+                // Final safety check for iOS: ensure context didn't drift back to suspended
+                if (audioContextRef.current?.state === 'suspended') {
+                    audioContextRef.current.resume();
+                }
+
                 startStreaming(newStream);
 
                 // Start local speech recognition to build a transcript for the summary generator
@@ -297,11 +363,11 @@ export function useLiveAPI(experience: string = "Unknown", inventory: string[] =
 
                         // If the agent is interrupted by user speech, flush the queue instantly
                         if (parsed.serverContent?.interrupted) {
-                            audioQueueRef.current = []; // Clear pending chunks
-                            if (currentAudioSourceRef.current) {
-                                currentAudioSourceRef.current.stop(); // Stop current playing 
-                                currentAudioSourceRef.current = null;
-                            }
+                            // audioQueueRef.current = []; // Clear pending chunks
+                            // if (currentAudioSourceRef.current) {
+                            //     currentAudioSourceRef.current.stop(); // Stop current playing 
+                            //     currentAudioSourceRef.current = null;
+                            // }
                         }
 
                         if (parsed.serverContent && parsed.serverContent.modelTurn) {

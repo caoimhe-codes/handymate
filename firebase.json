@@ -1,0 +1,13 @@
+{
+  "firestore": [
+    {
+      "database": "google-agents-handymate",
+      "rules": "firestore.rules",
+      "ignore": [
+        "firebase.json",
+        "**/.*",
+        "**/node_modules/**"
+      ]
+    }
+  ]
+}

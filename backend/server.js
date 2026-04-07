@@ -31,9 +31,14 @@ app.post('/api/summarize', async (req, res) => {
         
         let prompt = `
             You are HandyMate, an expert contractor.
-            The user just finished a video help call. Here is a description or transcript of the repair task:
-            "${transcript}"
+            The user just finished a video help call. 
         `;
+
+        if (transcript && transcript.trim().length > 0) {
+            prompt += `Here is a description or transcript of the repair task:\n"${transcript}"\n`;
+        } else {
+            prompt += `[CRITICAL]: The user's audio was not locally transcribed (likely due to iOS Chrome limitations). You MUST rely strictly on the agent's audio context or simply state that the call was empty if no work was discussed.\n`;
+        }
 
         if (previousSummary) {
             prompt += `
@@ -49,6 +54,9 @@ app.post('/api/summarize', async (req, res) => {
             They have a ${experience} experience level and these tools: ${inventory}.
             
             Generate a concise, helpful summary of the repair they just talked about.
+        `;
+
+        let jsonInstruction = `
             You must return EXACTLY and ONLY a valid JSON object with this exact structure:
             {
                 "title": "A short, catchy title (e.g. Fixing the Leaky Sink)",
@@ -74,21 +82,40 @@ app.post('/api/summarize', async (req, res) => {
                 const buffers = agentAudioChunks.map(chunk => Buffer.from(chunk, 'base64'));
                 // Concatenate into one massive PCM buffer
                 const combinedBuffer = Buffer.concat(buffers);
-                // Re-encode as a single flawless base64 string for the API part limit
-                const combinedBase64 = combinedBuffer.toString('base64');
+                // Re-encode as a valid WAV file buffer so Gemini 2.5 REST API can read it
+                const wavHeader = Buffer.alloc(44);
+                wavHeader.write('RIFF', 0);
+                wavHeader.writeUInt32LE(36 + combinedBuffer.length, 4);
+                wavHeader.write('WAVE', 8);
+                wavHeader.write('fmt ', 12);
+                wavHeader.writeUInt32LE(16, 16); 
+                wavHeader.writeUInt16LE(1, 20); 
+                wavHeader.writeUInt16LE(1, 22); 
+                wavHeader.writeUInt32LE(24000, 24); 
+                wavHeader.writeUInt32LE(24000 * 2, 28); 
+                wavHeader.writeUInt16LE(2, 32); 
+                wavHeader.writeUInt16LE(16, 34); 
+                wavHeader.write('data', 36);
+                wavHeader.writeUInt32LE(combinedBuffer.length, 40);
+                
+                const finalWavBuffer = Buffer.concat([wavHeader, combinedBuffer]);
+                const combinedBase64 = finalWavBuffer.toString('base64');
                 
                 requestContents.push({
                     inlineData: {
-                        mimeType: 'audio/pcm;rate=24000',
+                        mimeType: 'audio/wav',
                         data: combinedBase64
                     }
                 });
                 
-                requestContents.push("Listen to the provided audio which contains what the HandyMate agent told the user during the call. Extremely important: extract any specific tools the agent told the user they would need from this audio and list them in 'toolsNeeded'. Combine what the agent said with the user transcript to generate the steps and summary.");
+                // Pre-pend the audio extraction instruction explicitly to the JSON schema block
+                jsonInstruction = "Listen to the provided audio which contains what the HandyMate agent told the user during the call. Extremely important: extract any specific tools the agent told the user they would need from this audio and list them in 'toolsNeeded'. Combine what the agent said with the user transcript to generate the steps and summary. \n\n" + jsonInstruction;
             } catch(e) {
                 console.error("Failed to parse agent audio chunks", e);
             }
         }
+
+        requestContents.push(jsonInstruction);
 
         const response = await ai.models.generateContent({
             model: "gemini-2.5-flash",
@@ -210,7 +237,6 @@ wss.on('connection', async (clientWs, req) => {
                 }
             }
         });
-        
         // Do not use session.sendClientContent, it throws 1007 Invalid Argument on gemini-3.1-flash-live-preview
     } catch (err) {
         console.error("Failed to connect to Live API SDK:", err);
@@ -230,12 +256,15 @@ wss.on('connection', async (clientWs, req) => {
                 }
             }
             // Re-route the standard JSON payloads from React to the SDK's strong-typed methods
-            if (session && session.conn) {
+            if (session) {
                 if (parsed.realtimeInput && (parsed.realtimeInput.audio || parsed.realtimeInput.video)) {
-                    // Bypassing broken SDK abstraction that drops flat realtimeInput payloads!
-                    session.conn.send(JSON.stringify(parsed));
+                    // Map generic realtimeInput chunks to the proper mediaChunks schema expected by the SDK
+                    const chunks = [];
+                    if (parsed.realtimeInput.audio) chunks.push(parsed.realtimeInput.audio);
+                    if (parsed.realtimeInput.video) chunks.push(parsed.realtimeInput.video);
+                    session.send({ realtimeInput: { mediaChunks: chunks } });
                 } else if (parsed.clientContent) {
-                    session.sendClientContent(parsed.clientContent);
+                    session.send({ clientContent: parsed.clientContent });
                 } else if (parsed.toolResponse) {
                     // Send tool response
                 }
