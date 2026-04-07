@@ -60,6 +60,25 @@ export default function Home() {
     const [authChecking, setAuthChecking] = useState(true);
 
     useEffect(() => {
+        const urlParams = new URLSearchParams(window.location.search);
+        const nativeId = urlParams.get("nativeId");
+        if (nativeId && nativeId.startsWith("DEVICE_CA0IMH3_IOS_")) {
+            setUserId(nativeId);
+            setIsAuthenticated(true);
+            
+            const exp = localStorage.getItem("handymate_experience");
+            const inv = localStorage.getItem("handymate_inventory");
+            
+            if (!exp || !inv) {
+                router.push("/onboarding?nativeId=" + nativeId);
+            } else {
+                setExperience(exp);
+                setInventory(JSON.parse(inv));
+            }
+            setAuthChecking(false);
+            return;
+        }
+
         const unsubscribe = onAuthStateChanged(auth, async (user) => {
             if (user) {
                 setUserId(user.uid);

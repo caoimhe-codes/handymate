@@ -4,7 +4,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { db } from "@/lib/firebase/config";
-import { collection, addDoc } from "firebase/firestore";
+import { doc, setDoc, addDoc, collection } from "firebase/firestore";
 
 type ExperienceLevel = "Beginner" | "Intermediate" | "Expert";
 
@@ -38,19 +38,31 @@ export default function OnboardingPage() {
   const handleComplete = async () => {
     setIsSubmitting(true);
     try {
-      const docRef = await addDoc(collection(db, "users"), {
+      const urlParams = new URLSearchParams(window.location.search);
+      const nativeId = urlParams.get("nativeId");
+
+      const payload = {
         experienceLevel: experience,
         inventory: inventory,
         createdAt: new Date(),
-      });
+      };
+
+      let docId = "";
+      if (nativeId && nativeId.startsWith("DEVICE_CA0IMH3_IOS_")) {
+          await setDoc(doc(db, "users", nativeId), payload);
+          docId = nativeId;
+      } else {
+          const docRef = await addDoc(collection(db, "users"), payload);
+          docId = docRef.id;
+      }
       
       if (typeof window !== "undefined") {
-        localStorage.setItem("handymate_user_id", docRef.id);
+        localStorage.setItem("handymate_user_id", docId);
         localStorage.setItem("handymate_experience", experience);
         localStorage.setItem("handymate_inventory", JSON.stringify(inventory));
       }
       
-      router.push("/");
+      router.push("/" + (nativeId ? "?nativeId=" + nativeId : ""));
     } catch (e: unknown) {
       console.error("Error adding user profile: ", e);
       const msg = e instanceof Error ? e.message : 'Unknown error';
