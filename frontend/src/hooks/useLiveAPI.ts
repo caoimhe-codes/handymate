@@ -1,6 +1,6 @@
 /* © 2026 Lonrú Consulting Ltd. | Active Architecture™ Powered by Lonrú Studios™ */
 // src/hooks/useLiveAPI.ts
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 
 export interface ActiveProjectContext {
     summary?: string;
@@ -26,6 +26,19 @@ export function useLiveAPI(experience: string = "Unknown", inventory: string[] =
     const audioQueueRef = useRef<AudioBuffer[]>([]);
     const isPlayingRef = useRef<boolean>(false);
     const currentAudioSourceRef = useRef<AudioBufferSourceNode | null>(null);
+
+    useEffect(() => {
+        // Legendary iOS WebAudio bypass:
+        // By hooking into the raw touch event, Apple considers it a "User Gesture" and instantly releases all audio locks.
+        const unlockAudio = () => {
+            if (audioContextRef.current && audioContextRef.current.state === 'suspended') {
+                audioContextRef.current.resume();
+            }
+        };
+        
+        document.addEventListener('touchstart', unlockAudio, { passive: true });
+        return () => document.removeEventListener('touchstart', unlockAudio);
+    }, []);
 
     const playNextInQueue = () => {
         const audioCtx = audioContextRef.current;
