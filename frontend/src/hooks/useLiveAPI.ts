@@ -181,8 +181,11 @@ export function useLiveAPI(experience: string = "Unknown", inventory: string[] =
             wsRef.current.send(JSON.stringify(message));
         };
         
+        const dummyGain = audioCtx.createGain();
+        dummyGain.gain.value = 0;
         source.connect(processor);
-        processor.connect(audioCtx.destination);
+        processor.connect(dummyGain);
+        dummyGain.connect(audioCtx.destination);
 
         // --- Vision Loop / Hidden Canvas Extraction ---
         const hiddenVideo = document.createElement('video');
@@ -269,6 +272,10 @@ export function useLiveAPI(experience: string = "Unknown", inventory: string[] =
             streamRef.current = newStream;
             setStream(newStream);
             
+            // Synchronously construct the audio graph precisely when hardware permission is granted.
+            // DO NOT wait for WebSockets here, or Apple iOS Chrome silently destroys the microphone link.
+            startStreaming(newStream);
+            
             // Connect WebSocket with context injected into the query params
             const queryObj: Record<string, string> = {
                 experience,
@@ -308,8 +315,6 @@ export function useLiveAPI(experience: string = "Unknown", inventory: string[] =
                 if (audioContextRef.current?.state === 'suspended') {
                     audioContextRef.current.resume();
                 }
-
-                startStreaming(newStream);
 
                 // Start local speech recognition to build a transcript for the summary generator
                 // (Since Gemini 3.1 Live API strictly returns audio chunks without text echoes)
