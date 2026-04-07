@@ -166,10 +166,21 @@ export function useLiveAPI(experience: string = "Unknown", inventory: string[] =
                 inputData = downsampled;
             }
             
+            let maxAmplitude = 0;
             // convert Float32 to Int16
             const pcm16 = new Int16Array(inputData.length);
             for (let i = 0; i < inputData.length; i++) {
+                if (Math.abs(inputData[i]) > maxAmplitude) {
+                    maxAmplitude = Math.abs(inputData[i]);
+                }
                 pcm16[i] = Math.max(-32768, Math.min(32767, inputData[i] * 32768));
+            }
+
+            // [NOISE GATE] Drop frames that are mere room ambient hum (below roughly 1.5% volume)
+            // If we blindly stream silence, the ambient noise out the speakers will instantly trigger 
+            // Gemini's strict "interruption" logic, cutting off its responses!
+            if (maxAmplitude < 0.015) {
+                return;
             }
             
             // Convert to base64
