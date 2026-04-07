@@ -395,6 +395,9 @@ export function useLiveAPI(experience: string = "Unknown", inventory: string[] =
 
         } catch (error) {
             console.error('Failed to connect:', error);
+            if (typeof window !== 'undefined') {
+                alert(`iOS Diagnostic Error: ${error instanceof Error ? error.message : String(error)}`);
+            }
             setIsConnecting(false);
         }
     }, [experience, inventory, activeProject, playPcmAudio, startStreaming, stopStreaming]);
