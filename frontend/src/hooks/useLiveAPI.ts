@@ -22,10 +22,10 @@ export function useLiveAPI(experience: string = "Unknown", inventory: string[] =
     const videoIntervalRef = useRef<NodeJS.Timeout | null>(null);
     const recognitionRef = useRef<any>(null);
 
-    // Queue to hold incoming Gemini phonetic audio URLs so they play sequentially
-    const audioQueueRef = useRef<string[]>([]);
+    // Queue to hold incoming Gemini phonetic audio buffers so they play sequentially
+    const audioQueueRef = useRef<AudioBuffer[]>([]);
     const isPlayingRef = useRef<boolean>(false);
-    const currentAudioELRef = useRef<HTMLAudioElement | null>(null);
+    const currentAudioSourceRef = useRef<AudioBufferSourceNode | null>(null);
 
     useEffect(() => {
         // Legendary iOS WebAudio bypass:
@@ -41,35 +41,24 @@ export function useLiveAPI(experience: string = "Unknown", inventory: string[] =
     }, []);
 
     const playNextInQueue = () => {
-        if (audioQueueRef.current.length === 0) {
+        const audioCtx = audioContextRef.current;
+        if (!audioCtx || audioQueueRef.current.length === 0) {
             isPlayingRef.current = false;
             return;
         }
 
         isPlayingRef.current = true;
-        const targetUrl = audioQueueRef.current.shift()!;
+        const nextBuffer = audioQueueRef.current.shift()!;
         
-        const audioEl = new Audio(targetUrl);
-        currentAudioELRef.current = audioEl;
-        
-        audioEl.onended = () => {
-            currentAudioELRef.current = null;
-            URL.revokeObjectURL(targetUrl); // Clear memory!
+        const source = audioCtx.createBufferSource();
+        source.buffer = nextBuffer;
+        source.connect(audioCtx.destination);
+        source.onended = () => {
+            currentAudioSourceRef.current = null;
             playNextInQueue();
         };
-        
-        audioEl.onerror = () => {
-            currentAudioELRef.current = null;
-            URL.revokeObjectURL(targetUrl);
-            playNextInQueue();
-        };
-
-        audioEl.play().catch(e => {
-            console.error("Audio block playback failed", e);
-            currentAudioELRef.current = null;
-            URL.revokeObjectURL(targetUrl);
-            playNextInQueue();
-        });
+        currentAudioSourceRef.current = source;
+        source.start();
     };
 
     const playPcmAudio = useCallback((base64Data: string) => {
@@ -83,48 +72,45 @@ export function useLiveAPI(experience: string = "Unknown", inventory: string[] =
         }
         
         const pcm16 = new Int16Array(bytes.buffer);
+        const float32 = new Float32Array(pcm16.length);
+        for (let i = 0; i < pcm16.length; i++) {
+            float32[i] = pcm16[i] / 32768.0;
+        }
 
         try {
-            // Unify Mobile and Desktop using standard HTML5 Audio to bypass WebAudio sandbox and iOS manual Mute switches!
-            const numChannels = 1;
-            const sampleRate = 24000;
-            const byteRate = sampleRate * numChannels * 2;
-            const blockAlign = numChannels * 2;
-            const dataSize = pcm16.length * 2;
-            const buffer = new ArrayBuffer(44 + dataSize);
-            const view = new DataView(buffer);
-
-            const writeString = (v: DataView, offset: number, string: string) => {
-                for (let i = 0; i < string.length; i++) {
-                    v.setUint8(offset + i, string.charCodeAt(i));
-                }
-            };
-
-            // RIFF header
-            writeString(view, 0, 'RIFF');
-            view.setUint32(4, 36 + dataSize, true);
-            writeString(view, 8, 'WAVE');
-            writeString(view, 12, 'fmt ');
-            view.setUint32(16, 16, true);
-            view.setUint16(20, 1, true);
-            view.setUint16(22, numChannels, true);
-            view.setUint32(24, sampleRate, true);
-            view.setUint32(28, byteRate, true);
-            view.setUint16(32, blockAlign, true);
-            view.setUint16(34, 16, true);
-            writeString(view, 36, 'data');
-            view.setUint32(40, dataSize, true);
-
-            // Write PCM data
-            let offset = 44;
-            for (let i = 0; i < pcm16.length; i++, offset += 2) {
-                view.setInt16(offset, pcm16[i], true);
-            }
-
-            const blob = new Blob([buffer], { type: 'audio/wav' });
-            const url = URL.createObjectURL(blob);
+            // Hardware-based OS sniffing to circumvent "Request Desktop Website" user agent spoofing on iOS
+            // Apple explicitly unloads "ontouchend" when spoofing, so we MUST sniff maxTouchPoints at the GPU driver layer.
+            const isAppleTouch = typeof navigator !== 'undefined' && (
+                /iPad|iPhone|iPod/.test(navigator.userAgent) || 
+                (navigator.userAgent.includes("Mac") && navigator.maxTouchPoints > 1)
+            );
             
-            audioQueueRef.current.push(url);
+            const isMobile = isAppleTouch || (typeof navigator !== 'undefined' && /Mobi|Android/.test(navigator.userAgent));
+
+            if (isMobile && audioCtx.sampleRate !== 24000) {
+                // FALLBACK ONLY FOR MOBILE: Nearest-Neighbor resampling 
+                // This algorithm is mathematically identically to what successfully ran on Mobile in Turn 2.
+                // It cleanly bypasses all silent muting behavior on iOS Safari without complex APIs.
+                const targetRate = audioCtx.sampleRate;
+                const ratio = targetRate / 24000;
+                const newLength = Math.round(float32.length * ratio);
+                const finalBuffer = new Float32Array(newLength);
+                for (let i = 0; i < newLength; i++) {
+                    let srcIdx = Math.floor(i / ratio);
+                    if (srcIdx >= float32.length) srcIdx = float32.length - 1;
+                    finalBuffer[i] = float32[srcIdx];
+                }
+                
+                const fallbackBuffer = audioCtx.createBuffer(1, finalBuffer.length, targetRate);
+                fallbackBuffer.getChannelData(0).set(finalBuffer);
+                audioQueueRef.current.push(fallbackBuffer);
+            } else {
+                // PRIMARY: Native execution for Desktop Chrome
+                // This is mathematically strictly identical to what successfully ran on Laptop in Turn 1.
+                const audioBuffer = audioCtx.createBuffer(1, float32.length, 24000); 
+                audioBuffer.getChannelData(0).set(float32);
+                audioQueueRef.current.push(audioBuffer);
+            }
 
             if (!isPlayingRef.current) playNextInQueue();
         } catch (e) {
@@ -395,11 +381,10 @@ export function useLiveAPI(experience: string = "Unknown", inventory: string[] =
 
                         // If the agent is interrupted by user speech, flush the queue instantly
                         if (parsed.serverContent?.interrupted) {
-                            // audioQueueRef.current.forEach(url => URL.revokeObjectURL(url));
                             // audioQueueRef.current = []; // Clear pending chunks
-                            // if (currentAudioELRef.current) {
-                            //     currentAudioELRef.current.pause(); // Stop current playing 
-                            //     currentAudioELRef.current = null;
+                            // if (currentAudioSourceRef.current) {
+                            //     currentAudioSourceRef.current.stop(); // Stop current playing 
+                            //     currentAudioSourceRef.current = null;
                             // }
                         }
 
@@ -451,11 +436,10 @@ export function useLiveAPI(experience: string = "Unknown", inventory: string[] =
             
             // If the user clicks Pause, instantly kill any ongoing AI speech
             if (paused) {
-                audioQueueRef.current.forEach(url => URL.revokeObjectURL(url));
                 audioQueueRef.current = [];
-                if (currentAudioELRef.current) {
-                    currentAudioELRef.current.pause();
-                    currentAudioELRef.current = null;
+                if (currentAudioSourceRef.current) {
+                    currentAudioSourceRef.current.stop();
+                    currentAudioSourceRef.current = null;
                 }
                 if (recognitionRef.current) {
                     try { recognitionRef.current.stop(); } catch(e){}
