@@ -1,16 +1,10 @@
-import { GoogleAuthProvider, signInWithPopup, signInWithRedirect, signOut } from "firebase/auth";
+import { GoogleAuthProvider, signInWithPopup, signOut } from "firebase/auth";
 import { auth } from "./config";
 
 const provider = new GoogleAuthProvider();
 
 export const loginWithGoogle = async () => {
   try {
-    const isMobileDevice = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
-    if (isMobileDevice) {
-       // WKWebView handles popups very poorly (orphaned blank panes). We must force a top-level redirect.
-       await signInWithRedirect(auth, provider);
-       return null;
-    }
     const result = await signInWithPopup(auth, provider);
     return result.user;
   } catch (error) {
