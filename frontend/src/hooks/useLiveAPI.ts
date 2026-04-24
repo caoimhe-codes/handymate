@@ -182,11 +182,25 @@ export function useLiveAPI(experience: string = "Unknown", inventory: string[] =
     }, []);
 
     const connect = useCallback(async (projectOverride?: ActiveProjectContext) => {
+        // Clean up any stale connection before starting a new one.
+        // This handles the "Resume Call" case where a previous session may still be open.
+        if (wsRef.current && wsRef.current.readyState !== WebSocket.CLOSED) {
+            wsRef.current.close();
+            wsRef.current = null;
+        }
+        if (audioContextRef.current) {
+            audioContextRef.current.close();
+            audioContextRef.current = null;
+        }
+
         setIsConnecting(true);
         try {
             // Instantiate AudioContext synchronously to prevent iOS Safari from suspending it silently
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
+            // iOS can suspend AudioContext even within a user gesture if there's an async gap before
+            // audio is used. Explicitly resuming it here ensures it's in the 'running' state.
+            await audioContextRef.current.resume();
             
             const newStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
             streamRef.current = newStream;
