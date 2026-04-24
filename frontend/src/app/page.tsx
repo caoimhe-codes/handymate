@@ -45,7 +45,7 @@ export default function Home() {
     const [activeProject, setActiveProject] = useState<Project | null>(null);
 
     // Pass the context to the hook so it can send it to the backend
-    const { connected, connect, disconnect, stream, transcriptRef, isPaused, togglePause, isConnecting } = useLiveAPI(
+    const { connected, connect, disconnect, stream, transcriptRef, isPaused, togglePause, isConnecting, flipCamera } = useLiveAPI(
         experience, 
         inventory, 
         activeProject ? { summary: activeProject.summary, steps: activeProject.steps } : null
@@ -544,6 +544,17 @@ export default function Home() {
                             muted
                             className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-700 ${!stream ? 'opacity-0' : 'opacity-100'}`}
                         />
+                        {stream && (
+                            <button
+                                onClick={flipCamera}
+                                title="Flip Camera"
+                                className="absolute top-3 right-3 p-2.5 bg-black/40 hover:bg-black/70 backdrop-blur-md rounded-full text-white transition-all hover:scale-110 active:scale-95 z-20 shadow-lg"
+                            >
+                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                </svg>
+                            </button>
+                        )}
                     </div>
                 </div>
 

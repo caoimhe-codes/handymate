@@ -18,6 +18,7 @@ export function useLiveAPI(experience: string = "Unknown", inventory: string[] =
     const [stream, setStream] = useState<MediaStream | null>(null);
     const streamRef = useRef<MediaStream | null>(null);
     const videoIntervalRef = useRef<NodeJS.Timeout | null>(null);
+    const facingModeRef = useRef<'user' | 'environment'>('user');
 
     // Queue to hold incoming Gemini phonetic audio buffers so they play sequentially
     const audioQueueRef = useRef<AudioBuffer[]>([]);
@@ -289,6 +290,35 @@ export function useLiveAPI(experience: string = "Unknown", inventory: string[] =
         }
     }, [isPaused]);
 
+    const flipCamera = useCallback(async () => {
+        if (!streamRef.current) return;
 
-    return { connected, connect, disconnect, stream, transcriptRef, isPaused, togglePause, isConnecting };
+        const newFacingMode = facingModeRef.current === 'user' ? 'environment' : 'user';
+
+        try {
+            // Request a new video-only stream with the opposite camera
+            const newVideoStream = await navigator.mediaDevices.getUserMedia({
+                video: { facingMode: newFacingMode }
+            });
+
+            const newVideoTrack = newVideoStream.getVideoTracks()[0];
+            const oldVideoTrack = streamRef.current.getVideoTracks()[0];
+
+            // Swap tracks in-place — both the visible <video> and the hidden
+            // canvas loop point to the same MediaStream object, so they
+            // automatically pick up the new track without restarting the session.
+            if (oldVideoTrack) {
+                streamRef.current.removeTrack(oldVideoTrack);
+                oldVideoTrack.stop();
+            }
+            if (newVideoTrack) {
+                streamRef.current.addTrack(newVideoTrack);
+                facingModeRef.current = newFacingMode;
+            }
+        } catch (err) {
+            console.error('Failed to flip camera:', err);
+        }
+    }, []);
+
+    return { connected, connect, disconnect, stream, transcriptRef, isPaused, togglePause, isConnecting, flipCamera };
 }
