@@ -68,7 +68,8 @@ export function useLiveAPI(experience: string = "Unknown", inventory: string[] =
         if (!isPlayingRef.current) {
             playNextInQueue();
         }
-    }, [playNextInQueue]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     const stopStreaming = useCallback(() => {
         if (videoIntervalRef.current) {
@@ -183,6 +184,7 @@ export function useLiveAPI(experience: string = "Unknown", inventory: string[] =
         setIsConnecting(true);
         try {
             // Instantiate AudioContext synchronously to prevent iOS Safari from suspending it silently
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
             
             const newStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
@@ -242,7 +244,7 @@ export function useLiveAPI(experience: string = "Unknown", inventory: string[] =
                                 }
                             }
                         }
-                    } catch (_e) {
+                    } catch {
                          // silently ignore parsing errors for now
                     }
                 }

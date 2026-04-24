@@ -3,8 +3,9 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { db } from "@/lib/firebase/config";
-import { collection, addDoc } from "firebase/firestore";
+import { db, auth } from "@/lib/firebase/config";
+import { doc, setDoc } from "firebase/firestore";
+import { onAuthStateChanged, User } from "firebase/auth";
 
 type ExperienceLevel = "Beginner" | "Intermediate" | "Expert";
 
@@ -21,6 +22,14 @@ export default function OnboardingPage() {
   const [toolsList, setToolsList] = useState<string[]>(initialToolsList);
   const [inventory, setInventory] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [authUser, setAuthUser] = useState<User | null>(null);
+
+  useEffect(() => {
+      const unsubscribe = onAuthStateChanged(auth, (user) => {
+          setAuthUser(user);
+      });
+      return () => unsubscribe();
+  }, []);
 
   // Vision Tool Scanner State
   const [isScanning, setIsScanning] = useState(false);
@@ -36,16 +45,21 @@ export default function OnboardingPage() {
   };
 
   const handleComplete = async () => {
+    if (!authUser) {
+        alert("Please sign in first.");
+        router.push("/");
+        return;
+    }
     setIsSubmitting(true);
     try {
-      const docRef = await addDoc(collection(db, "users"), {
+      await setDoc(doc(db, "users", authUser.uid), {
         experienceLevel: experience,
         inventory: inventory,
         createdAt: new Date(),
       });
       
       if (typeof window !== "undefined") {
-        localStorage.setItem("handymate_user_id", docRef.id);
+        localStorage.setItem("handymate_user_id", authUser.uid);
         localStorage.setItem("handymate_experience", experience);
         localStorage.setItem("handymate_inventory", JSON.stringify(inventory));
       }
