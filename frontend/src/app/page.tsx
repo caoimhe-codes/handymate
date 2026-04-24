@@ -10,6 +10,13 @@ import { loginWithGoogle, logout } from "@/lib/firebase/auth";
 import { auth } from "@/lib/firebase/config";
 import { onAuthStateChanged, User } from "firebase/auth";
 
+// Derive the HTTP API base URL from the WebSocket URL so we don't need a
+// separate NEXT_PUBLIC_API_URL env var — same host, just different protocol.
+const getApiUrl = () => {
+    const wsUrl = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8080';
+    return wsUrl.replace(/^wss:\/\//, 'https://').replace(/^ws:\/\//, 'http://');
+};
+
 interface Project {
     id: string;
     title?: string;
@@ -146,7 +153,7 @@ export default function Home() {
                 const base64Data = canvas.toDataURL("image/jpeg", 0.7).split(',')[1];
                 
                 try {
-                    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+                    const apiUrl = getApiUrl();
                     const res = await fetch(`${apiUrl}/api/detect-tools`, {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
@@ -225,7 +232,7 @@ export default function Home() {
         stopScannerCamera();
         
         try {
-            const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+            const apiUrl = getApiUrl();
             const res = await fetch(`${apiUrl}/api/detect-tools`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -268,7 +275,7 @@ export default function Home() {
         }
         
         try {
-            const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+            const apiUrl = getApiUrl();
             const res = await fetch(`${apiUrl}/api/summarize`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
